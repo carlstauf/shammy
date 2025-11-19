@@ -1,0 +1,175 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shammy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shammy
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-shammy_dev_password}
+      POSTGRES_DB: shammy
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U shammy -d shammy']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - shammy-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: shammy-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--raw', 'incr', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - shammy-network
+
+  airbyte-db:
+    image: postgres:16-alpine
+    container_name: shammy-airbyte-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airbyte
+      POSTGRES_PASSWORD: ${AIRBYTE_DB_PASSWORD:-airbyte_password}
+      POSTGRES_DB: airbyte
+    volumes:
+      - airbyte-db-data:/var/lib/postgresql/data
+    networks:
+      - shammy-network
+
+  airbyte-server:
+    image: airbyte/server:latest
+    container_name: shammy-airbyte-server
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+      - '8001:8001'
+    environment:
+      DATABASE_USER: airbyte
+      DATABASE_PASSWORD: ${AIRBYTE_DB_PASSWORD:-airbyte_password}
+      DATABASE_HOST: airbyte-db
+      DATABASE_PORT: 5432
+      DATABASE_DB: airbyte
+      CONFIG_ROOT: /data
+      WORKSPACE_ROOT: /tmp/workspace
+      TRACKING_STRATEGY: logging
+      WEBAPP_URL: http://localhost:8001
+      API_URL: http://localhost:8000
+    volumes:
+      - airbyte-data:/data
+      - airbyte-workspace:/tmp/workspace
+    depends_on:
+      airbyte-db:
+        condition: service_started
+    networks:
+      - shammy-network
+
+  airbyte-worker:
+    image: airbyte/worker:latest
+    container_name: shammy-airbyte-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_USER: airbyte
+      DATABASE_PASSWORD: ${AIRBYTE_DB_PASSWORD:-airbyte_password}
+      DATABASE_HOST: airbyte-db
+      DATABASE_PORT: 5432
+      DATABASE_DB: airbyte
+      CONFIG_ROOT: /data
+      WORKSPACE_ROOT: /tmp/workspace
+      AIRBYTE_VERSION: dev
+    volumes:
+      - airbyte-data:/data
+      - airbyte-workspace:/tmp/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - airbyte-server
+    networks:
+      - shammy-network
+
+  airbyte-webapp:
+    image: airbyte/webapp:latest
+    container_name: shammy-airbyte-webapp
+    restart: unless-stopped
+    ports:
+      - '8002:80'
+    environment:
+      API_URL: http://airbyte-server:8000/api/v1
+    depends_on:
+      - airbyte-server
+    networks:
+      - shammy-network
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.5
+    container_name: shammy-meilisearch
+    restart: unless-stopped
+    ports:
+      - '7700:7700'
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-dev_master_key_change_in_prod}
+      MEILI_ENV: ${MEILI_ENV:-development}
+    volumes:
+      - meilisearch-data:/meili_data
+    networks:
+      - shammy-network
+
+  datasette:
+    image: datasetteproject/datasette:latest
+    container_name: shammy-datasette
+    restart: unless-stopped
+    ports:
+      - '8003:8001'
+    volumes:
+      - ../../data:/data:ro
+    command: datasette /data/*.db -h 0.0.0.0 --cors
+    networks:
+      - shammy-network
+
+  supabase-studio:
+    image: supabase/studio:latest
+    container_name: shammy-supabase-studio
+    restart: unless-stopped
+    ports:
+      - '3001:3000'
+    environment:
+      SUPABASE_URL: http://kong:8000
+      STUDIO_PG_META_URL: http://meta:8080
+    depends_on:
+      - postgres
+    networks:
+      - shammy-network
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  airbyte-db-data:
+    driver: local
+  airbyte-data:
+    driver: local
+  airbyte-workspace:
+    driver: local
+  meilisearch-data:
+    driver: local
+
+networks:
+  shammy-network:
+    driver: bridge
