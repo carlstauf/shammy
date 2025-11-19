@@ -1,0 +1,38 @@
+{
+  "name": "shammy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal data aggregation platform for LLMs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/shammy"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "db:migrate": "cd packages/database && pnpm run migrate",
+    "db:push": "cd packages/database && pnpm run push",
+    "db:seed": "cd packages/database && pnpm run seed",
+    "docker:up": "docker-compose -f infra/docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f infra/docker/docker-compose.yml down",
+    "docker:logs": "docker-compose -f infra/docker/docker-compose.yml logs -f",
+    "setup": "./scripts/setup/install-deps.sh && ./scripts/setup/init-db.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.55.0",
+    "prettier": "^3.1.0",
+    "turbo": "^1.11.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.10.0"
+}
